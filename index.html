@@ -3340,7 +3340,21 @@ function loadState() {
       return merged;
     }
   } catch (e) { console.warn('loadState', e); }
-  return seedDemoData(structuredClone(DEFAULT_STATE));
+  // Aucune sauvegarde existante : la version publiée s'ouvre VIERGE par défaut.
+  // Les données de démonstration ne se chargent que si l'URL contient ?demo=1
+  // (pratique pour présenter le produit, ex : lien Etsy de démo).
+  if (wantsDemo()) {
+    return seedDemoData(structuredClone(DEFAULT_STATE));
+  }
+  return structuredClone(DEFAULT_STATE);
+}
+
+/* Détecte ?demo=1 dans l'URL (sans dépendre de URLSearchParams pour la compat
+   avec les très anciens navigateurs). */
+function wantsDemo() {
+  try {
+    return /(?:^|[?&])demo=1(?:&|$)/.test(location.search || '');
+  } catch (e) { return false; }
 }
 function saveState(silent) {
   try {
@@ -3793,10 +3807,11 @@ VIEWS.dashboard = () => {
         </p>
       </div>
       <div class="page-actions">
-        <button class="btn" onclick="exportJSON()" title="Télécharger un fichier JSON sur cet appareil">${svgIcon('download')}<span>Exporter ma sauvegarde</span></button>
         ${hasNames
-          ? `<button class="btn btn-primary" onclick="route('tasks')">${svgIcon('check')}<span>Mes tâches</span></button>`
-          : `<button class="btn btn-primary" onclick="route('settings')">${svgIcon('heart')}<span>Renseigner mon mariage</span></button>`}
+          ? `<button class="btn" onclick="exportJSON()" title="Télécharger un fichier JSON sur cet appareil">${svgIcon('download')}<span>Exporter ma sauvegarde</span></button>
+             <button class="btn btn-primary" onclick="route('tasks')">${svgIcon('check')}<span>Mes tâches</span></button>`
+          : `<button class="btn" onclick="loadDemoData()" title="Découvrir l'application avec des exemples">${svgIcon('star')}<span>Voir un exemple</span></button>
+             <button class="btn btn-primary" onclick="route('settings')">${svgIcon('heart')}<span>Renseigner mon mariage</span></button>`}
       </div>
     </div>
 
@@ -6399,7 +6414,12 @@ VIEWS.saveData = () => {
       </div>
       <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:10px">
         <button class="btn" onclick="printWeddingSummary()" title="Imprime un vrai résumé mariage A4">${svgIcon('print')}<span>Imprimer un résumé</span></button>
-        <button class="btn btn-soft-danger" onclick="resetApp()" title="Restaure les données de démo">${svgIcon('refresh')}<span>Réinitialiser avec démo</span></button>
+        <button class="btn" onclick="loadDemoData()" title="Remplit le planner avec des données d'exemple">${svgIcon('star')}<span>Charger les données de démonstration</span></button>
+        <button class="btn btn-soft-danger" onclick="resetApp()" title="Vide tout puis recharge les données de démo">${svgIcon('refresh')}<span>Réinitialiser avec démo</span></button>
+      </div>
+      <div class="help-note" style="margin-top:12px">
+        <span class="ico">💡</span>
+        <div>Votre planner s'ouvre <strong>vierge</strong> par défaut. Pour découvrir l'application avec des exemples, cliquez sur <strong>Charger les données de démonstration</strong> — vous pourrez tout effacer ensuite avec <em>Commencer à zéro</em>.</div>
       </div>
       <div class="help-note" style="margin-top:14px">
         <span class="ico">🛟</span>
@@ -6487,6 +6507,27 @@ function resetApp() {
   renderNav();
   renderView();
   toast('Application réinitialisée');
+}
+
+/* Charge les données de démonstration de façon volontaire (bouton dédié).
+   Non destructif si l'app est vide ; demande confirmation si des données existent. */
+function loadDemoData() {
+  const hasData = (STATE.guests && STATE.guests.length) ||
+                  (STATE.budget && STATE.budget.length) ||
+                  ((STATE.settings.bride || '').trim()) ||
+                  ((STATE.settings.groom || '').trim());
+  if (hasData) {
+    if (!confirm('Charger les données de démonstration remplacera vos données actuelles. Pensez à exporter une sauvegarde avant.\n\nContinuer ?')) return;
+  }
+  STATE = seedDemoData(structuredClone(DEFAULT_STATE));
+  STATE.settings.unsavedChanges = 0;
+  STATE.settings.lastExportDate = '';
+  STATE.settings.jsonReminderHiddenUntil = 0;
+  saveState(true, true); // chargement démo : pas une modification utilisateur
+  applyTheme();
+  renderNav();
+  route('dashboard');
+  toast('Données de démonstration chargées ✨');
 }
 
 /* ============================================================
