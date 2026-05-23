@@ -4190,41 +4190,78 @@ VIEWS.settings = () => {
   `;
 };
 
+/* Lit les champs du formulaire « Mon mariage » et les écrit dans STATE.settings.
+   - Ne touche un champ que s'il est présent dans le DOM (sûr hors page settings).
+   - Ne force PAS de valeur « — » : un champ vide reste vide (cohérent avec l'état
+     vierge et l'affichage « Bienvenue »). */
+function captureSettingsForm() {
+  const el = (id) => document.getElementById(id);
+  let f;
+  if ((f = el('f-bride')))     STATE.settings.bride = f.value.trim();
+  if ((f = el('f-groom')))     STATE.settings.groom = f.value.trim();
+  if ((f = el('f-date')))      STATE.settings.date = f.value;
+  if ((f = el('f-venue')))     STATE.settings.venue = f.value.trim();
+  if ((f = el('f-currency')))  STATE.settings.currency = f.value;
+  if ((f = el('f-budget')))    STATE.settings.budgetTarget = +f.value || 0;
+  if ((f = el('f-guests')))    STATE.settings.guestEstimate = +f.value || 0;
+  if ((f = el('f-style')))     STATE.settings.style = f.value;
+  if ((f = el('f-accent')))    STATE.settings.accent = f.value.trim();
+  if ((f = el('f-wtype')))     STATE.settings.weddingType = f.value;
+  if ((f = el('f-days')))      STATE.settings.daysCount = +f.value || 1;
+  if ((f = el('f-cultures')))  STATE.settings.cultures = f.value.trim();
+  if ((f = el('f-languages'))) STATE.settings.languages = f.value.trim();
+  if ((f = el('f-traditions')))STATE.settings.traditions = f.value.trim();
+  if ((f = el('f-weather')))   STATE.settings.weatherPlanB = f.value.trim();
+}
+
+/* Met à jour visuellement la palette active (carte + coche) SANS reconstruire la
+   page — indispensable pour ne pas effacer la saisie en cours du formulaire. */
+function refreshPaletteActiveState(activeId) {
+  document.querySelectorAll('.palette').forEach(p => {
+    const on = p.dataset.pal === activeId;
+    p.classList.toggle('active', on);
+    let chk = p.querySelector('.pal-check');
+    if (on && !chk) {
+      chk = document.createElement('div');
+      chk.className = 'pal-check';
+      chk.textContent = '✓';
+      p.appendChild(chk);
+    } else if (!on && chk) {
+      chk.remove();
+    }
+  });
+}
+
 PAGE_INIT.settings = () => {
+  // Choix d'un thème / palette : on capture d'abord la saisie en cours pour ne
+  // JAMAIS la perdre, puis on applique le thème SANS renderView().
   document.querySelectorAll('.palette').forEach(el => {
     el.addEventListener('click', () => {
-      STATE.settings.theme = el.dataset.pal;
-      saveState(true); // silent (pas de toast à chaque clic) mais bump : c'est un changement de préférence
-      applyTheme();
-      renderView();
+      captureSettingsForm();              // 1) la saisie en cours est sauvegardée dans STATE
+      STATE.settings.theme = el.dataset.pal; // 2) on enregistre le thème
+      saveState(true);                    // 3) persiste (silencieux) + compte la préférence
+      applyTheme();                       // 4) applique les variables CSS instantanément
+      refreshPaletteActiveState(el.dataset.pal); // 5) met à jour la coche sans rebuild
     });
   });
+
+  // Filet de sécurité : chaque champ modifié est capté et persisté silencieusement.
+  // Ainsi, même en quittant la page sans cliquer « Enregistrer », rien n'est perdu.
+  ['f-bride','f-groom','f-date','f-venue','f-currency','f-budget','f-guests','f-style',
+   'f-accent','f-wtype','f-days','f-cultures','f-languages','f-traditions','f-weather']
+    .forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.addEventListener('change', () => {
+        captureSettingsForm();
+        saveState(true, true);            // silencieux + sans incrémenter le compteur
+        applyTheme();                     // met à jour les prénoms/date dans la sidebar
+      });
+    });
 };
 
 function saveSettings() {
-  STATE.settings.bride = document.getElementById('f-bride').value.trim() || '—';
-  STATE.settings.groom = document.getElementById('f-groom').value.trim() || '—';
-  STATE.settings.date = document.getElementById('f-date').value;
-  STATE.settings.venue = document.getElementById('f-venue').value.trim();
-  STATE.settings.currency = document.getElementById('f-currency').value;
-  STATE.settings.budgetTarget = +document.getElementById('f-budget').value || 0;
-  STATE.settings.guestEstimate = +document.getElementById('f-guests').value || 0;
-  STATE.settings.style = document.getElementById('f-style').value;
-  STATE.settings.accent = document.getElementById('f-accent').value.trim();
-  // Champs multiculturels (peuvent ne pas exister sur les anciens formulaires)
-  const wtype = document.getElementById('f-wtype');
-  if (wtype) STATE.settings.weddingType = wtype.value;
-  const days = document.getElementById('f-days');
-  if (days) STATE.settings.daysCount = +days.value || 1;
-  const cult = document.getElementById('f-cultures');
-  if (cult) STATE.settings.cultures = cult.value.trim();
-  const langs = document.getElementById('f-languages');
-  if (langs) STATE.settings.languages = langs.value.trim();
-  const trad = document.getElementById('f-traditions');
-  if (trad) STATE.settings.traditions = trad.value.trim();
-  const wpb = document.getElementById('f-weather');
-  if (wpb) STATE.settings.weatherPlanB = wpb.value.trim();
-  saveState();
+  captureSettingsForm();
+  saveState();      // toast « Enregistré » + compte la modification
   applyTheme();
   renderView();
 }
